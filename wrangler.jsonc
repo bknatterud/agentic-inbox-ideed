@@ -16,6 +16,9 @@
 		"DOMAINS": "ideed.me",
 		"EMAIL_ADDRESSES": []
 	},
+	"triggers": {
+		"crons": ["17 * * * *"]
+   },
 	"send_email": [
 		{
 			"name": "EMAIL",

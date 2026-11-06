@@ -8,6 +8,7 @@ import { jwtVerify, createRemoteJWKSet } from "jose";
 import { createRequestHandler } from "react-router";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
+import { runBackup } from "./lib/backup";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
@@ -110,6 +111,10 @@ app.all("*", (c) => {
 // Export the Hono app as the default export with an email handler
 export default {
 	fetch: app.fetch,
+	// Cron trigger (see "triggers" in wrangler.jsonc): incremental .eml backup to R2.
+	async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+		ctx.waitUntil(runBackup(env));
+	},
 	async email(
 		event: { raw: ReadableStream; rawSize: number },
 		env: Env,

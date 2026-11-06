@@ -869,4 +869,50 @@ export class MailboxDO extends DurableObject<Env> {
 			this.db.insert(schema.attachments).values(attachments).run();
 		}
 	}
+
+	// ── Backup (used by workers/lib/backup.ts) ─────────────────────
+
+	async getEmailsToBackUp(limit: number) {
+		const rows = [
+			...this.ctx.storage.sql.exec(
+				`SELECT id, folder_id, subject, sender, recipient, cc, bcc, date, body,
+				        in_reply_to, email_references, message_id, raw_headers
+				 FROM emails
+				 WHERE backed_up_at IS NULL AND folder_id != ?1
+				 ORDER BY date ASC LIMIT ?2`,
+				Folders.DRAFT,
+				limit,
+			),
+		] as Record<string, any>[];
+		if (rows.length === 0) return [];
+
+		const ids = rows.map((r) => r.id as string);
+		const placeholders = ids.map((_, i) => `?${i + 1}`).join(",");
+		const atts = [
+			...this.ctx.storage.sql.exec(
+				`SELECT id, email_id, filename, mimetype, content_id, disposition
+				 FROM attachments WHERE email_id IN (${placeholders})`,
+				...ids,
+			),
+		] as Record<string, any>[];
+
+		return rows.map((r) => ({
+			...r,
+			attachments: atts.filter((a) => a.email_id === r.id),
+		}));
+	}
+
+	async markBackedUp(ids: string[]) {
+		const now = new Date().toISOString();
+		for (const id of ids) {
+			this.ctx.storage.sql.exec(`UPDATE emails SET backed_up_at = ?1 WHERE id = ?2`, now, id);
+		}
+	}
+
+	async countEmailsToBackUp() {
+		const row = this.ctx.storage.sql
+			.exec(`SELECT COUNT(*) AS n FROM emails WHERE backed_up_at IS NULL AND folder_id != ?1`, Folders.DRAFT)
+			.one() as { n: number };
+		return row.n;
+	}
 }

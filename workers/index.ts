@@ -18,6 +18,7 @@ import {
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
+import { runBackup } from "./lib/backup";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
 
@@ -90,6 +91,15 @@ app.get("/api/v1/config", (c) => {
 	const domains = domainsRaw.split(",").map((d) => d.trim()).filter(Boolean);
 	const emailAddresses = c.env.EMAIL_ADDRESSES ?? [];
 	return c.json({ domains, emailAddresses });
+});
+
+// -- Backup ---------------------------------------------------------
+
+// Runs the same incremental backup as the scheduled job. Open in a browser
+// (behind Cloudflare Access) to back up immediately.
+app.get("/api/v1/backup/run", async (c) => {
+	const results = await runBackup(c.env);
+	return c.json({ ok: true, results });
 });
 
 // -- Mailboxes ------------------------------------------------------
@@ -367,6 +377,9 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 	if (!(await env.BUCKET.head(`mailboxes/${mailboxId}.json`))) { console.log(`Ignoring email for ${mailboxId}: mailbox does not exist`); return; }
 
 	const stub = env.MAILBOX.get(env.MAILBOX.idFromName(mailboxId));
+
+	// Keep the original message exactly as received; the backup job copies it verbatim.
+	await env.BUCKET.put(`raw/${messageId}.eml`, rawEmail, { httpMetadata: { contentType: "message/rfc822" } });
 
 	const attachmentData: StoredAttachment[] = [];
 	if (parsedEmail.attachments) {

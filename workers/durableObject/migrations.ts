@@ -168,4 +168,12 @@ export const mailboxMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_emails_folder_date ON emails(folder_id, date DESC);
         `,
 	},
+	{
+		// Runner applies this atomically via storage.transactionSync().
+		name: "9_add_backed_up_at",
+		sql: `
+            ALTER TABLE emails ADD COLUMN backed_up_at TEXT;
+            CREATE INDEX IF NOT EXISTS idx_emails_backed_up_at ON emails(backed_up_at);
+        `,
+	},
 ];
