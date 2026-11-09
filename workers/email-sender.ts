@@ -58,8 +58,11 @@ export async function sendEmail(
 	}
 
 	if (params.attachments && params.attachments.length > 0) {
+		// Pass attachments as raw bytes, not the base64 string. Every official
+		// Cloudflare example sends binary content, and handing over the string
+		// produced corrupted files at the recipient.
 		message.attachments = params.attachments.map((att) => ({
-			content: att.content,
+			content: base64ToBytes(att.content),
 			filename: att.filename,
 			type: att.type,
 			disposition: att.disposition,
@@ -69,4 +72,13 @@ export async function sendEmail(
 
 	const result = await binding.send(message as any);
 	return { messageId: result.messageId };
+}
+
+/** Decode base64 (tolerating a data: URL prefix and whitespace) to bytes. */
+function base64ToBytes(content: string): Uint8Array {
+	const b64 = content.replace(/^data:[^,]*,/, "").replace(/\s+/g, "");
+	const binary = atob(b64);
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+	return bytes;
 }
